@@ -1,5 +1,5 @@
 {
-  "name": "mcpfleet",
+  "name": "@fclef819/mcpfleet",
   "version": "0.0.1",
   "description": "CLI for managing Codex MCP server config blocks across environments",
   "license": "MIT",
