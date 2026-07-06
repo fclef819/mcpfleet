@@ -19,6 +19,7 @@ describe("resolveSubscriptions", () => {
         name: "shared",
         command: "npx",
         args: ["-y", "a"],
+        startup_timeout_sec: 30,
       },
     };
 
@@ -85,5 +86,49 @@ describe("resolveSubscriptions", () => {
         ["main/default"],
       ),
     ).toThrow(/Conflicting MCP server definition/);
+  });
+
+  it("supports URL-based server definitions", () => {
+    const resolved = resolveSubscriptions(
+      [
+        makeRegistry("main", {
+          kind: "MCPRegistry",
+          schemaVersion: 1,
+          packages: [
+            {
+              kind: "MCPPackage",
+              schemaVersion: 1,
+              name: "remote-api",
+              server: {
+                name: "remote-api",
+                url: "https://example.com/mcp",
+                startup_timeout_sec: 10,
+              },
+            },
+          ],
+          profiles: [
+            {
+              kind: "MCPProfile",
+              schemaVersion: 1,
+              name: "default",
+              packages: ["remote-api"],
+            },
+          ],
+        }),
+      ],
+      ["main/default"],
+    );
+
+    expect(resolved.servers).toEqual([
+      {
+        name: "remote-api",
+        command: undefined,
+        url: "https://example.com/mcp",
+        args: [],
+        env: {},
+        startup_timeout_sec: 10,
+        sources: ["main/default"],
+      },
+    ]);
   });
 });

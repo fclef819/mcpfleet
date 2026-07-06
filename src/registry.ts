@@ -23,18 +23,22 @@ export async function initLocalRegistry(baseDir: string): Promise<void> {
   await ensureDir(paths.profilesDir);
 }
 
-export async function addLocalPackage(baseDir: string, name: string, command: string, args: string[]): Promise<string> {
+export async function addLocalPackageDefinition(
+  baseDir: string,
+  input: {
+    name: string;
+    description?: string;
+    server: MCPPackage["server"];
+  },
+): Promise<string> {
   await initLocalRegistry(baseDir);
-  const filePath = path.join(localRegistryPaths(baseDir).packagesDir, `${name}.yaml`);
+  const filePath = path.join(localRegistryPaths(baseDir).packagesDir, `${input.name}.yaml`);
   const pkg: MCPPackage = {
     kind: "MCPPackage",
     schemaVersion: 1,
-    name,
-    server: {
-      name,
-      command,
-      args,
-    },
+    name: input.name,
+    description: input.description,
+    server: input.server,
   };
   await writeYamlFile(filePath, pkg);
   return filePath;
@@ -94,6 +98,10 @@ function validateLocalRegistry(packages: MCPPackage[], profiles: MCPProfile[]): 
   for (const pkg of packages) {
     assert(!packageNames.has(pkg.name), `Duplicate package name in local registry: ${pkg.name}`);
     packageNames.add(pkg.name);
+    assert(
+      Boolean(pkg.server.command) !== Boolean(pkg.server.url),
+      `Package ${pkg.name} must define exactly one of server.command or server.url`,
+    );
   }
 
   const profileNames = new Set<string>();

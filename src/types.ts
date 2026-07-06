@@ -5,9 +5,11 @@ export interface MCPPackage {
   description?: string;
   server: {
     name?: string;
-    command: string;
+    command?: string;
+    url?: string;
     args?: string[];
     env?: Record<string, string>;
+    startup_timeout_sec?: number;
   };
 }
 
@@ -39,9 +41,11 @@ export interface RegistryIndex {
 
 export interface ResolvedServer {
   name: string;
-  command: string;
+  command?: string;
+  url?: string;
   args: string[];
   env: Record<string, string>;
+  startup_timeout_sec?: number;
   sources: string[];
 }
 

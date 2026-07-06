@@ -1,6 +1,6 @@
 {
   "name": "@fclef819/mcpfleet",
-  "version": "0.0.6",
+  "version": "0.0.7",
   "description": "CLI for managing Codex MCP server config blocks across environments",
   "license": "MIT",
   "repository": {

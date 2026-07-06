@@ -14,6 +14,24 @@ export async function doctorServers(servers: ResolvedServer[]): Promise<DoctorIt
 }
 
 async function doctorServer(server: ResolvedServer): Promise<DoctorItem> {
+  if (server.url) {
+    return {
+      server: server.name,
+      command: server.url,
+      ok: true,
+      detail: "URL-based server; no local runtime check required in v0.1",
+    };
+  }
+
+  if (!server.command) {
+    return {
+      server: server.name,
+      command: "(missing)",
+      ok: false,
+      detail: "Server is missing both command and url",
+    };
+  }
+
   const executable = normalizeCommand(server.command);
   if (!["npx", "uvx", "docker"].includes(executable)) {
     return {

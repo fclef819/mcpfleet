@@ -50,7 +50,7 @@ npx @fclef819/mcpfleet --help
 
 ```bash
 mcpfleet registry init
-mcpfleet package add <name> -- <command...>
+mcpfleet package add <name> [--server-name <serverName>] [--env KEY=VALUE ...] [--startup-timeout-sec <sec>] (--url <url> | -- <command...>)
 mcpfleet profile create <name>
 mcpfleet profile add <profile> <package...>
 mcpfleet registry build
@@ -80,6 +80,19 @@ server:
     - /workspace
   env:
     EXAMPLE_ENV: "1"
+  startup_timeout_sec: 30
+```
+
+URL-based server:
+
+```yaml
+kind: MCPPackage
+schemaVersion: 1
+name: internal-api
+server:
+  name: internal-api
+  url: https://example.com/mcp
+  startup_timeout_sec: 10
 ```
 
 ### MCPProfile
@@ -110,7 +123,7 @@ Create a local registry:
 
 ```bash
 mcpfleet registry init
-mcpfleet package add filesystem -- npx -y @modelcontextprotocol/server-filesystem /workspace
+mcpfleet package add filesystem --startup-timeout-sec 30 -- npx -y @modelcontextprotocol/server-filesystem /workspace
 mcpfleet profile create default
 mcpfleet profile add default filesystem
 mcpfleet registry build

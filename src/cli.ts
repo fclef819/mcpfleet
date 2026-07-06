@@ -2,7 +2,7 @@
 import { replaceManagedBlock } from "./codexConfig.js";
 import { doctorServers } from "./doctor.js";
 import { defaultPaths } from "./paths.js";
-import { buildLocalRegistry, createLocalProfile, addLocalPackage, addPackagesToProfile, fetchRegistryIndex, initLocalRegistry } from "./registry.js";
+import { addLocalPackageDefinition, addPackagesToProfile, buildLocalRegistry, createLocalProfile, fetchRegistryIndex, initLocalRegistry } from "./registry.js";
 import { renderManagedBlock } from "./render.js";
 import { resolveSubscriptions } from "./resolver.js";
 import { loadFleetConfig, readTextIfExists, saveFleetConfig, writeText } from "./store.js";
@@ -84,15 +84,20 @@ async function handlePackageCommand(args: string[], localRegistryDir: string): P
     throw new Error(`Unknown package command: ${subcommand ?? "(missing)"}`);
   }
   if (!name) {
-    throw new Error("Usage: package add <name> -- <command...>");
+    throw new Error("Usage: package add <name> [--server-name <serverName>] [--env KEY=VALUE ...] [--startup-timeout-sec <sec>] (--url <url> | -- <command...>)");
   }
-  const separator = rest.indexOf("--");
-  if (separator === -1 || separator === rest.length - 1) {
-    throw new Error("Usage: package add <name> -- <command...>");
-  }
-  const commandAndArgs = rest.slice(separator + 1);
-  const [command, ...commandArgs] = commandAndArgs;
-  const filePath = await addLocalPackage(localRegistryDir, name, command, commandArgs);
+  const parsed = parsePackageAddArgs(rest);
+  const filePath = await addLocalPackageDefinition(localRegistryDir, {
+    name,
+    server: {
+      name: parsed.serverName ?? name,
+      command: parsed.command,
+      url: parsed.url,
+      args: parsed.commandArgs,
+      env: Object.keys(parsed.env).length > 0 ? parsed.env : undefined,
+      startup_timeout_sec: parsed.startupTimeoutSec,
+    },
+  });
   console.log(`Wrote ${filePath}`);
 }
 
@@ -143,8 +148,12 @@ async function plan(configPath: string, codexConfigPath: string): Promise<void> 
   console.log(`Subscriptions: ${resolved.subscriptions.join(", ") || "(none)"}`);
   console.log(`Servers: ${resolved.servers.length}`);
   for (const server of resolved.servers) {
+    if (server.url) {
+      console.log(`- ${server.name}: ${server.url}`);
+      continue;
+    }
     const args = server.args.join(" ");
-    console.log(`- ${server.name}: ${server.command}${args ? ` ${args}` : ""}`);
+    console.log(`- ${server.name}: ${server.command ?? "(missing)"}${args ? ` ${args}` : ""}`);
   }
   console.log("");
   process.stdout.write(renderedBlock);
@@ -193,7 +202,7 @@ function upsertRegistry(registries: RegistryRef[], next: RegistryRef): RegistryR
 function printHelp(): void {
   console.log(`mcpfleet commands:
   registry init
-  package add <name> -- <command...>
+  package add <name> [--server-name <serverName>] [--env KEY=VALUE ...] [--startup-timeout-sec <sec>] (--url <url> | -- <command...>)
   profile create <name>
   profile add <profile> <package...>
   registry build
@@ -203,6 +212,88 @@ function printHelp(): void {
   plan
   apply
   doctor`);
+}
+
+function parsePackageAddArgs(args: string[]): {
+  serverName?: string;
+  env: Record<string, string>;
+  startupTimeoutSec?: number;
+  url?: string;
+  command?: string;
+  commandArgs: string[];
+} {
+  const env: Record<string, string> = {};
+  let serverName: string | undefined;
+  let startupTimeoutSec: number | undefined;
+  let url: string | undefined;
+  let command: string | undefined;
+  let commandArgs: string[] = [];
+
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index];
+    if (arg === "--") {
+      const remainder = args.slice(index + 1);
+      if (remainder.length === 0) {
+        throw new Error("package add requires a command after --");
+      }
+      [command, ...commandArgs] = remainder;
+      break;
+    }
+    if (arg === "--url") {
+      url = args[index + 1];
+      if (!url) {
+        throw new Error("--url requires a value");
+      }
+      index += 1;
+      continue;
+    }
+    if (arg === "--server-name") {
+      serverName = args[index + 1];
+      if (!serverName) {
+        throw new Error("--server-name requires a value");
+      }
+      index += 1;
+      continue;
+    }
+    if (arg === "--startup-timeout-sec") {
+      const raw = args[index + 1];
+      const parsed = Number(raw);
+      if (!raw || !Number.isInteger(parsed) || parsed < 0) {
+        throw new Error("--startup-timeout-sec requires a non-negative integer");
+      }
+      startupTimeoutSec = parsed;
+      index += 1;
+      continue;
+    }
+    if (arg === "--env") {
+      const raw = args[index + 1];
+      if (!raw || !raw.includes("=")) {
+        throw new Error("--env requires KEY=VALUE");
+      }
+      const equals = raw.indexOf("=");
+      const key = raw.slice(0, equals);
+      env[key] = raw.slice(equals + 1);
+      if (!key) {
+        throw new Error("--env requires KEY=VALUE");
+      }
+      index += 1;
+      continue;
+    }
+    throw new Error(`Unknown package add option: ${arg}`);
+  }
+
+  if (Boolean(url) === Boolean(command)) {
+    throw new Error("package add requires exactly one of --url <url> or -- <command...>");
+  }
+
+  return {
+    serverName,
+    env,
+    startupTimeoutSec,
+    url,
+    command,
+    commandArgs,
+  };
 }
 
 main().catch((error: unknown) => {

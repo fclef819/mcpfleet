@@ -15,9 +15,17 @@ export function renderManagedBlock(servers: ResolvedServer[]): string {
 
   for (const server of servers) {
     lines.push(`[mcp_servers.${server.name}]`);
-    lines.push(`command = ${formatTomlValue(server.command)}`);
+    if (server.command) {
+      lines.push(`command = ${formatTomlValue(server.command)}`);
+    }
+    if (server.url) {
+      lines.push(`url = ${formatTomlValue(server.url)}`);
+    }
     if (server.args.length > 0) {
       lines.push(`args = ${formatTomlValue(server.args)}`);
+    }
+    if (server.startup_timeout_sec !== undefined) {
+      lines.push(`startup_timeout_sec = ${server.startup_timeout_sec}`);
     }
     if (Object.keys(server.env).length > 0) {
       lines.push("");

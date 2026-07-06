@@ -52,8 +52,10 @@ function mergePackage(target: Map<string, ResolvedServer>, pkg: MCPPackage, sour
   const next: ResolvedServer = {
     name,
     command: pkg.server.command,
+    url: pkg.server.url,
     args: pkg.server.args ?? [],
     env: sortObject(pkg.server.env ?? {}),
+    startup_timeout_sec: pkg.server.startup_timeout_sec,
     sources: [source],
   };
 
@@ -74,12 +76,16 @@ function sameServer(a: ResolvedServer, b: ResolvedServer): boolean {
   return JSON.stringify({
     name: a.name,
     command: a.command,
+    url: a.url,
     args: a.args,
     env: a.env,
+    startup_timeout_sec: a.startup_timeout_sec,
   }) === JSON.stringify({
     name: b.name,
     command: b.command,
+    url: b.url,
     args: b.args,
     env: b.env,
+    startup_timeout_sec: b.startup_timeout_sec,
   });
 }
