@@ -1,6 +1,6 @@
-# mcpfleet
+# @fclef819/mcpfleet
 
-`mcpfleet` is a TypeScript CLI for managing the Codex CLI MCP server configuration across multiple environments.
+`@fclef819/mcpfleet` is a TypeScript CLI for managing the Codex CLI MCP server configuration across multiple environments.
 
 It subscribes to static MCP package/profile registries and updates only the managed block in `~/.codex/config.toml`.
 
@@ -12,7 +12,7 @@ It subscribes to static MCP package/profile registries and updates only the mana
 
 ## Managed Codex Config Block
 
-`mcpfleet` only replaces the section between these markers in `~/.codex/config.toml`:
+`@fclef819/mcpfleet` only replaces the section between these markers in `~/.codex/config.toml`:
 
 ```toml
 # BEGIN MCPFLEET
@@ -31,13 +31,13 @@ Important behavior:
 ## Install
 
 ```bash
-npm install -g mcpfleet
+npm install -g @fclef819/mcpfleet
 ```
 
 Or run it without installing globally:
 
 ```bash
-npx mcpfleet --help
+npx @fclef819/mcpfleet --help
 ```
 
 ## File Locations
