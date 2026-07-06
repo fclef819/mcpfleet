@@ -1,0 +1,308 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+RUN_DIR="$PROJECT_ROOT/.run"
+LOG_DIR="$RUN_DIR/logs"
+
+BACKEND_PID_FILE="$RUN_DIR/backend.pid"
+FRONTEND_PID_FILE="$RUN_DIR/frontend.pid"
+
+BACKEND_LOG_FILE="$LOG_DIR/backend.log"
+FRONTEND_LOG_FILE="$LOG_DIR/frontend.log"
+
+BACKEND_DIR="$PROJECT_ROOT"
+FRONTEND_DIR="$PROJECT_ROOT/frontend"
+
+BACKEND_CMD=(
+  uv run uvicorn app.main:app
+  --host 0.0.0.0
+  --port 8000
+  --reload
+)
+
+FRONTEND_CMD=(
+  pnpm dev
+)
+
+mkdir -p "$RUN_DIR" "$LOG_DIR"
+
+msg() {
+  printf '%s\n' "$*"
+}
+
+err() {
+  printf 'ERROR: %s\n' "$*" >&2
+}
+
+pid_is_running() {
+  local pid="$1"
+  kill -0 "$pid" 2>/dev/null
+}
+
+read_pid_file() {
+  local pid_file="$1"
+  [[ -f "$pid_file" ]] || return 1
+  local pid
+  pid="$(tr -d '[:space:]' < "$pid_file")"
+  [[ -n "$pid" ]] || return 1
+  printf '%s\n' "$pid"
+}
+
+service_pid() {
+  local service="$1"
+  case "$service" in
+    backend) read_pid_file "$BACKEND_PID_FILE" ;;
+    frontend) read_pid_file "$FRONTEND_PID_FILE" ;;
+    *) return 1 ;;
+  esac
+}
+
+service_log_file() {
+  local service="$1"
+  case "$service" in
+    backend) printf '%s\n' "$BACKEND_LOG_FILE" ;;
+    frontend) printf '%s\n' "$FRONTEND_LOG_FILE" ;;
+    *) return 1 ;;
+  esac
+}
+
+service_pid_file() {
+  local service="$1"
+  case "$service" in
+    backend) printf '%s\n' "$BACKEND_PID_FILE" ;;
+    frontend) printf '%s\n' "$FRONTEND_PID_FILE" ;;
+    *) return 1 ;;
+  esac
+}
+
+service_dir() {
+  local service="$1"
+  case "$service" in
+    backend) printf '%s\n' "$BACKEND_DIR" ;;
+    frontend) printf '%s\n' "$FRONTEND_DIR" ;;
+    *) return 1 ;;
+  esac
+}
+
+is_running() {
+  local service="$1"
+  local pid
+  pid="$(service_pid "$service" 2>/dev/null)" || return 1
+  pid_is_running "$pid"
+}
+
+cleanup_stale_pid() {
+  local service="$1"
+  local pid_file
+  pid_file="$(service_pid_file "$service")"
+  if [[ -f "$pid_file" ]]; then
+    local pid
+    if pid="$(read_pid_file "$pid_file" 2>/dev/null)"; then
+      if ! pid_is_running "$pid"; then
+        rm -f "$pid_file"
+      fi
+    else
+      rm -f "$pid_file"
+    fi
+  fi
+}
+
+start_service() {
+  local service="$1"
+  local dir log_file pid_file
+  dir="$(service_dir "$service")"
+  log_file="$(service_log_file "$service")"
+  pid_file="$(service_pid_file "$service")"
+
+  cleanup_stale_pid "$service"
+
+  if is_running "$service"; then
+    msg "$service is already running (PID: $(service_pid "$service"))"
+    return 0
+  fi
+
+  if [[ ! -d "$dir" ]]; then
+    err "$service directory not found: $dir"
+    return 1
+  fi
+
+  local -a cmd
+  case "$service" in
+    backend) cmd=("${BACKEND_CMD[@]}") ;;
+    frontend) cmd=("${FRONTEND_CMD[@]}") ;;
+    *) err "unknown service: $service"; return 1 ;;
+  esac
+
+  (
+    cd "$dir"
+    exec setsid nohup "${cmd[@]}" >>"$log_file" 2>&1
+  ) &
+  local launcher_pid=$!
+
+  sleep 1
+
+  if pid_is_running "$launcher_pid"; then
+    printf '%s\n' "$launcher_pid" > "$pid_file"
+    msg "started $service (PID: $launcher_pid)"
+    msg "log: $log_file"
+  else
+    err "failed to start $service"
+    return 1
+  fi
+}
+
+stop_service() {
+  local service="$1"
+  local pid_file
+  pid_file="$(service_pid_file "$service")"
+
+  cleanup_stale_pid "$service"
+
+  if ! [[ -f "$pid_file" ]]; then
+    msg "$service is not running"
+    return 0
+  fi
+
+  local pid
+  pid="$(read_pid_file "$pid_file")" || {
+    rm -f "$pid_file"
+    msg "$service is not running"
+    return 0
+  }
+
+  if ! pid_is_running "$pid"; then
+    rm -f "$pid_file"
+    msg "$service is not running"
+    return 0
+  fi
+
+  if kill -- "-$pid" 2>/dev/null; then
+    :
+  else
+    kill "$pid" 2>/dev/null || true
+  fi
+
+  for _ in $(seq 1 20); do
+    if ! pid_is_running "$pid"; then
+      rm -f "$pid_file"
+      msg "stopped $service"
+      return 0
+    fi
+    sleep 0.5
+  done
+
+  err "$service did not stop gracefully, killing"
+  if kill -9 -- "-$pid" 2>/dev/null; then
+    :
+  else
+    kill -9 "$pid" 2>/dev/null || true
+  fi
+
+  rm -f "$pid_file"
+  msg "stopped $service"
+}
+
+status_service() {
+  local service="$1"
+  cleanup_stale_pid "$service"
+  if is_running "$service"; then
+    local pid
+    pid="$(service_pid "$service")"
+    msg "$service: running (PID: $pid)"
+  else
+    msg "$service: stopped"
+  fi
+}
+
+logs_service() {
+  local service="$1"
+  local log_file
+  log_file="$(service_log_file "$service")"
+
+  touch "$log_file"
+  msg "showing logs for $service: $log_file"
+  exec tail -n 100 -f "$log_file"
+}
+
+logs_all() {
+  touch "$BACKEND_LOG_FILE" "$FRONTEND_LOG_FILE"
+  msg "showing logs for backend and frontend"
+  exec tail -n 100 -f "$BACKEND_LOG_FILE" "$FRONTEND_LOG_FILE"
+}
+
+start_all() {
+  start_service backend
+  start_service frontend
+}
+
+stop_all() {
+  stop_service frontend
+  stop_service backend
+}
+
+status_all() {
+  status_service backend
+  status_service frontend
+}
+
+restart_all() {
+  stop_all
+  start_all
+}
+
+usage() {
+  cat <<'EOF'
+Usage:
+  ./scripts/app.sh start
+  ./scripts/app.sh stop
+  ./scripts/app.sh restart
+  ./scripts/app.sh status
+  ./scripts/app.sh logs [backend|frontend|all]
+
+Notes:
+  - Project root is resolved from the script location.
+  - Expected layout:
+      project/
+        frontend/
+        scripts/app.sh
+  - Backend command:
+      uv run uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+  - Frontend command:
+      pnpm dev
+EOF
+}
+
+main() {
+  local cmd="${1:-}"
+  case "$cmd" in
+    start)
+      start_all
+      ;;
+    stop)
+      stop_all
+      ;;
+    restart)
+      restart_all
+      ;;
+    status)
+      status_all
+      ;;
+    logs)
+      case "${2:-all}" in
+        backend) logs_service backend ;;
+        frontend) logs_service frontend ;;
+        all) logs_all ;;
+        *) err "unknown logs target: ${2:-}"; usage; exit 1 ;;
+      esac
+      ;;
+    *)
+      usage
+      exit 1
+      ;;
+  esac
+}
+
+main "$@"
