@@ -57,4 +57,30 @@ command = "uvx"
     const result = replaceManagedBlock(existing, block);
     expect(result.externalMcpServerBlocks).toEqual(["external"]);
   });
+
+  it("adopts a matching unmanaged top-level block and preserves child tables", () => {
+    const existing = `[mcp_servers.demo]
+command = "npx"
+
+[mcp_servers.demo.env]
+FOO = "bar"
+`;
+
+    const result = replaceManagedBlock(existing, block);
+    expect(result.updatedText).toContain("# BEGIN MCPFLEET");
+    expect(result.updatedText).toContain("[mcp_servers.demo]");
+    expect(result.updatedText).toContain("[mcp_servers.demo.env]");
+    expect(result.updatedText.match(/\[mcp_servers\.demo\]/g)).toHaveLength(1);
+    expect(result.externalMcpServerBlocks).toEqual([]);
+  });
+
+  it("keeps a differing unmanaged top-level block outside the managed block", () => {
+    const existing = `[mcp_servers.demo]
+command = "uvx"
+`;
+
+    const result = replaceManagedBlock(existing, block);
+    expect(result.updatedText.match(/\[mcp_servers\.demo\]/g)).toHaveLength(2);
+    expect(result.externalMcpServerBlocks).toEqual(["demo"]);
+  });
 });

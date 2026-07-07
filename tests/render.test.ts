@@ -19,8 +19,8 @@ describe("renderManagedBlock", () => {
     expect(rendered).toContain('command = "npx"');
     expect(rendered).toContain('args = ["-y", "@demo/server"]');
     expect(rendered).toContain("startup_timeout_sec = 30");
-    expect(rendered).toContain("[mcp_servers.demo.env]");
-    expect(rendered).toContain('FOO = "bar"');
+    expect(rendered).not.toContain("[mcp_servers.demo.env]");
+    expect(rendered).not.toContain('FOO = "bar"');
     expect(rendered).toContain("# END MCPFLEET");
   });
 

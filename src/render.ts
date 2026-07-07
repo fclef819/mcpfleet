@@ -27,13 +27,6 @@ export function renderManagedBlock(servers: ResolvedServer[]): string {
     if (server.startup_timeout_sec !== undefined) {
       lines.push(`startup_timeout_sec = ${server.startup_timeout_sec}`);
     }
-    if (Object.keys(server.env).length > 0) {
-      lines.push("");
-      lines.push(`[mcp_servers.${server.name}.env]`);
-      for (const [key, value] of Object.entries(server.env)) {
-        lines.push(`${key} = ${formatTomlValue(value)}`);
-      }
-    }
     lines.push("");
   }
 
