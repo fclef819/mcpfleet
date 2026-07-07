@@ -45,4 +45,16 @@ command = "uvx"
     const result = replaceManagedBlock(existing, block);
     expect(result.externalMcpServerBlocks).toEqual(["external"]);
   });
+
+  it("ignores nested mcp server tables outside the marker block", () => {
+    const existing = `[mcp_servers.drawio.tools.list-documents]
+enabled = true
+
+[mcp_servers.external]
+command = "uvx"
+`;
+
+    const result = replaceManagedBlock(existing, block);
+    expect(result.externalMcpServerBlocks).toEqual(["external"]);
+  });
 });

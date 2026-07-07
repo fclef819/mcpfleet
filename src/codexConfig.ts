@@ -5,7 +5,7 @@ export interface ConfigAnalysis {
   externalMcpServerBlocks: string[];
 }
 
-const MCP_SERVER_HEADER = /^\s*\[mcp_servers\.([^\]]+)\]\s*$/;
+const MCP_SERVER_HEADER = /^\s*\[mcp_servers\.([^. \t\r\n\]]+)\]\s*$/;
 
 export function replaceManagedBlock(existingText: string, block: string): ConfigAnalysis {
   const externalMcpServerBlocks = findExternalMcpServerBlocks(existingText);
