@@ -3,6 +3,7 @@ import { BEGIN_MARKER, END_MARKER } from "./render.js";
 
 export interface ConfigAnalysis {
   updatedText: string;
+  adoptedMcpServerBlocks: string[];
   externalMcpServerBlocks: string[];
 }
 
@@ -26,12 +27,14 @@ export function replaceManagedBlock(existingText: string, block: string): Config
     const after = adoption.text.slice(adoptedEndIndex + END_MARKER.length);
     return {
       updatedText: normalizeJoin(before, block, after),
+      adoptedMcpServerBlocks: adoption.adoptedServers,
       externalMcpServerBlocks,
     };
   }
 
   return {
     updatedText: appendBlock(adoption.text, block),
+    adoptedMcpServerBlocks: adoption.adoptedServers,
     externalMcpServerBlocks,
   };
 }
@@ -83,25 +86,32 @@ function findExternalMcpServerBlocks(existingText: string): string[] {
   return Array.from(new Set(sections)).sort();
 }
 
-function adoptMatchingExternalMcpServers(existingText: string, block: string): { text: string } {
+function adoptMatchingExternalMcpServers(existingText: string, block: string): {
+  text: string;
+  adoptedServers: string[];
+} {
   const desiredServers = new Map(parseTopLevelMcpServers(block).map((server) => [server.name, server.normalized]));
   if (desiredServers.size === 0) {
-    return { text: existingText };
+    return { text: existingText, adoptedServers: [] };
   }
 
-  const rangesToRemove = parseTopLevelMcpServers(existingText)
+  const adoptedServers = parseTopLevelMcpServers(existingText)
     .filter((server) => !server.insideManaged)
     .filter((server) => {
       const desired = desiredServers.get(server.name);
       return desired !== undefined && sameManagedServer(server.normalized, desired);
-    })
-    .map((server) => server.range);
+    });
+
+  const rangesToRemove = adoptedServers.map((server) => server.range);
 
   if (rangesToRemove.length === 0) {
-    return { text: existingText };
+    return { text: existingText, adoptedServers: [] };
   }
 
-  return { text: removeRanges(existingText, rangesToRemove) };
+  return {
+    text: removeRanges(existingText, rangesToRemove),
+    adoptedServers: Array.from(new Set(adoptedServers.map((server) => server.name))).sort(),
+  };
 }
 
 function parseTopLevelMcpServers(text: string): Array<{

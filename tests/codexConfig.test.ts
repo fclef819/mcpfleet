@@ -43,6 +43,7 @@ command = "uvx"
 `;
 
     const result = replaceManagedBlock(existing, block);
+    expect(result.adoptedMcpServerBlocks).toEqual([]);
     expect(result.externalMcpServerBlocks).toEqual(["external"]);
   });
 
@@ -55,6 +56,7 @@ command = "uvx"
 `;
 
     const result = replaceManagedBlock(existing, block);
+    expect(result.adoptedMcpServerBlocks).toEqual([]);
     expect(result.externalMcpServerBlocks).toEqual(["external"]);
   });
 
@@ -67,6 +69,7 @@ FOO = "bar"
 `;
 
     const result = replaceManagedBlock(existing, block);
+    expect(result.adoptedMcpServerBlocks).toEqual(["demo"]);
     expect(result.updatedText).toContain("# BEGIN MCPFLEET");
     expect(result.updatedText).toContain("[mcp_servers.demo]");
     expect(result.updatedText).toContain("[mcp_servers.demo.env]");
@@ -80,6 +83,7 @@ command = "uvx"
 `;
 
     const result = replaceManagedBlock(existing, block);
+    expect(result.adoptedMcpServerBlocks).toEqual([]);
     expect(result.updatedText.match(/\[mcp_servers\.demo\]/g)).toHaveLength(2);
     expect(result.externalMcpServerBlocks).toEqual(["demo"]);
   });

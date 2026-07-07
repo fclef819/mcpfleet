@@ -142,18 +142,19 @@ async function subscribe(configPath: string, subscription: string | undefined): 
 
 async function plan(configPath: string, codexConfigPath: string): Promise<void> {
   const { renderedBlock, analysis, resolved } = await computePlan(configPath, codexConfigPath);
+  printConfigAnalysis(analysis);
   if (analysis.externalMcpServerBlocks.length > 0) {
-    console.warn(`Warning: unmanaged mcp_servers blocks found outside markers: ${analysis.externalMcpServerBlocks.join(", ")}`);
+    console.warn(formatNotice("warn", `unmanaged mcp_servers blocks found outside markers: ${analysis.externalMcpServerBlocks.join(", ")}`));
   }
-  console.log(`Subscriptions: ${resolved.subscriptions.join(", ") || "(none)"}`);
-  console.log(`Servers: ${resolved.servers.length}`);
+  console.log(`${highlight("Subscriptions", ANSI_BOLD)}: ${resolved.subscriptions.join(", ") || "(none)"}`);
+  console.log(`${highlight("Servers", ANSI_BOLD)}: ${resolved.servers.length}`);
   for (const server of resolved.servers) {
     if (server.url) {
-      console.log(`- ${server.name}: ${server.url}`);
+      console.log(`  ${highlight(server.name, ANSI_CYAN)}: ${server.url}`);
       continue;
     }
     const args = server.args.join(" ");
-    console.log(`- ${server.name}: ${server.command ?? "(missing)"}${args ? ` ${args}` : ""}`);
+    console.log(`  ${highlight(server.name, ANSI_CYAN)}: ${server.command ?? "(missing)"}${args ? ` ${args}` : ""}`);
   }
   console.log("");
   process.stdout.write(renderedBlock);
@@ -162,16 +163,18 @@ async function plan(configPath: string, codexConfigPath: string): Promise<void> 
 async function apply(configPath: string, codexConfigPath: string): Promise<void> {
   const { analysis } = await computePlan(configPath, codexConfigPath);
   await writeText(codexConfigPath, analysis.updatedText);
+  printConfigAnalysis(analysis);
   if (analysis.externalMcpServerBlocks.length > 0) {
-    console.warn(`Warning: unmanaged mcp_servers blocks found outside markers: ${analysis.externalMcpServerBlocks.join(", ")}`);
+    console.warn(formatNotice("warn", `unmanaged mcp_servers blocks found outside markers: ${analysis.externalMcpServerBlocks.join(", ")}`));
   }
   console.log(`Updated ${codexConfigPath}`);
 }
 
 async function doctor(configPath: string, codexConfigPath: string): Promise<void> {
   const { analysis, resolved } = await computePlan(configPath, codexConfigPath);
+  printConfigAnalysis(analysis);
   if (analysis.externalMcpServerBlocks.length > 0) {
-    console.warn(`Warning: unmanaged mcp_servers blocks found outside markers: ${analysis.externalMcpServerBlocks.join(", ")}`);
+    console.warn(formatNotice("warn", `unmanaged mcp_servers blocks found outside markers: ${analysis.externalMcpServerBlocks.join(", ")}`));
   }
   const items = await doctorServers(resolved.servers);
   for (const item of items) {
@@ -197,6 +200,29 @@ async function computePlan(configPath: string, codexConfigPath: string) {
 function upsertRegistry(registries: RegistryRef[], next: RegistryRef): RegistryRef[] {
   const filtered = registries.filter((item) => item.name !== next.name);
   return [...filtered, next].sort((a, b) => a.name.localeCompare(b.name));
+}
+
+const ANSI_RESET = "\u001B[0m";
+const ANSI_BOLD = "\u001B[1m";
+const ANSI_CYAN = "\u001B[36m";
+const ANSI_YELLOW = "\u001B[33m";
+const ANSI_BLUE = "\u001B[34m";
+
+function printConfigAnalysis(analysis: { adoptedMcpServerBlocks: string[] }): void {
+  if (analysis.adoptedMcpServerBlocks.length === 0) {
+    return;
+  }
+
+  console.log(formatNotice("info", `unmanaged mcp_servers blocks will be moved into the managed block: ${analysis.adoptedMcpServerBlocks.join(", ")}`));
+}
+
+function formatNotice(level: "info" | "warn", message: string): string {
+  const color = level === "info" ? ANSI_BLUE : ANSI_YELLOW;
+  return `${color}${level.toUpperCase()}${ANSI_RESET} ${message}`;
+}
+
+function highlight(text: string, color: string): string {
+  return `${color}${text}${ANSI_RESET}`;
 }
 
 function printHelp(): void {
