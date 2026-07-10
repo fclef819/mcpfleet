@@ -14,19 +14,19 @@ const MANAGED_KEYS = ["args", "command", "startup_timeout_sec", "url"] as const;
 export function replaceManagedBlock(existingText: string, block: string): ConfigAnalysis {
   const adoption = adoptMatchingExternalMcpServers(existingText, block);
   const externalMcpServerBlocks = findExternalMcpServerBlocks(adoption.text);
-  const beginIndex = existingText.indexOf(BEGIN_MARKER);
-  const endIndex = existingText.indexOf(END_MARKER);
+  const beginIndex = adoption.text.indexOf(BEGIN_MARKER);
+  const endIndex = adoption.text.indexOf(END_MARKER);
 
   if (beginIndex !== -1 || endIndex !== -1) {
     if (beginIndex === -1 || endIndex === -1 || endIndex < beginIndex) {
       throw new Error("Incomplete MCPFLEET marker block in Codex config");
     }
-    const adoptedBeginIndex = adoption.text.indexOf(BEGIN_MARKER);
-    const adoptedEndIndex = adoption.text.indexOf(END_MARKER);
-    const before = adoption.text.slice(0, adoptedBeginIndex);
-    const after = adoption.text.slice(adoptedEndIndex + END_MARKER.length);
+    const before = adoption.text.slice(0, beginIndex);
+    const insideManaged = adoption.text.slice(beginIndex + BEGIN_MARKER.length, endIndex);
+    const preservedManagedContent = extractNonMcpManagedContent(insideManaged);
+    const after = adoption.text.slice(endIndex + END_MARKER.length);
     return {
-      updatedText: normalizeJoin(before, block, after),
+      updatedText: normalizeJoin(before, preservedManagedContent, block, after),
       adoptedMcpServerBlocks: adoption.adoptedServers,
       externalMcpServerBlocks,
     };
@@ -48,11 +48,34 @@ function appendBlock(existingText: string, block: string): string {
   return `${existingText}${suffix}\n${block}`;
 }
 
-function normalizeJoin(before: string, block: string, after: string): string {
-  const normalizedBefore = before.replace(/\s*$/, "");
-  const normalizedAfter = after.replace(/^\s*/, "");
-  const pieces = [normalizedBefore, block.trimEnd(), normalizedAfter].filter((part) => part.length > 0);
+function normalizeJoin(...parts: string[]): string {
+  const pieces = parts
+    .map((part, index) => {
+      if (index === 0) {
+        return part.replace(/\s*$/, "");
+      }
+      if (index === parts.length - 1) {
+        return part.replace(/^\s*/, "");
+      }
+      return part.trim();
+    })
+    .filter((part) => part.length > 0);
   return `${pieces.join("\n\n")}\n`;
+}
+
+function extractNonMcpManagedContent(text: string): string {
+  const managedServers = parseTopLevelMcpServers(`${BEGIN_MARKER}${text}${END_MARKER}`)
+    .filter((server) => server.insideManaged)
+    .map((server) => ({
+      start: server.range.start - BEGIN_MARKER.length,
+      end: server.range.end - BEGIN_MARKER.length,
+    }));
+
+  if (managedServers.length === 0) {
+    return text.trim();
+  }
+
+  return removeRanges(text, managedServers).trim();
 }
 
 function findExternalMcpServerBlocks(existingText: string): string[] {

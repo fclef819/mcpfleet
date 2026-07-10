@@ -27,6 +27,39 @@ trust_level = "trusted"
     expect(result.updatedText).toContain("[mcp_servers.demo]");
   });
 
+  it("moves non-mcp settings out of the managed block before replacing it", () => {
+    const existing = `trust_level = "trusted"
+
+# BEGIN MCPFLEET
+[tools]
+web_search = true
+
+[mcp_servers.old]
+command = "old"
+# END MCPFLEET
+`;
+
+    const result = replaceManagedBlock(existing, block);
+    expect(result.updatedText).toContain('[tools]\nweb_search = true\n\n# BEGIN MCPFLEET');
+    expect(result.updatedText).toContain("[mcp_servers.demo]");
+    expect(result.updatedText).not.toContain("[mcp_servers.old]");
+  });
+
+  it("moves root-level keys out of the managed block before the managed tables", () => {
+    const existing = `# BEGIN MCPFLEET
+approval_policy = "never"
+
+[mcp_servers.old]
+command = "old"
+# END MCPFLEET
+`;
+
+    const result = replaceManagedBlock(existing, block);
+    expect(result.updatedText).toContain('approval_policy = "never"\n\n# BEGIN MCPFLEET');
+    expect(result.updatedText).toContain("[mcp_servers.demo]");
+    expect(result.updatedText).not.toContain("[mcp_servers.old]");
+  });
+
   it("appends a marker block when one does not exist", () => {
     const existing = `[projects."/tmp/demo"]
 trust_level = "trusted"

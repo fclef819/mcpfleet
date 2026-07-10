@@ -23,6 +23,7 @@ It subscribes to static MCP package/profile registries and updates only the mana
 Important behavior:
 
 - Settings outside the marker block are preserved
+- Non-`[mcp_servers.*]` settings found inside the marker block are preserved and moved outside it during `apply`
 - If the marker block does not exist, it is appended to the end of the file
 - If unmanaged `[mcp_servers.*]` blocks exist outside the markers, `plan`, `apply`, and `doctor` warn
 - Duplicate MCP server names with different definitions cause an error
