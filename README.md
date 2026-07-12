@@ -1,6 +1,9 @@
-# @fclef819/mcpfleet
+# mcpfleet
+[![npm version](https://img.shields.io/npm/v/@fclef819/mcpfleet.svg)](https://www.npmjs.com/package/@fclef819/mcpfleet)
+[![npm downloads](https://img.shields.io/npm/dw/@fclef819/mcpfleet.svg)](https://www.npmjs.com/package/@fclef819/mcpfleet)
+[![license](https://img.shields.io/npm/l/@fclef819/mcpfleet.svg)](https://github.com/fclef819/mcpfleet/blob/main/LICENSE)
 
-`@fclef819/mcpfleet` is a TypeScript CLI for managing the Codex CLI MCP server configuration across multiple environments.
+`mcpfleet` is a TypeScript CLI for managing the Codex CLI MCP server configuration across multiple environments.
 
 It subscribes to static MCP package/profile registries and updates only the managed block in `~/.codex/config.toml`.
 
