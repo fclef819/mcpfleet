@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { replaceManagedBlock } from "./codexConfig.js";
+import { renderClaudeManagedServers, replaceClaudeManagedServers } from "./claudeConfig.js";
 import { doctorServers } from "./doctor.js";
 import { defaultPaths } from "./paths.js";
 import { addLocalPackageDefinition, addPackagesToProfile, buildLocalRegistry, createLocalProfile, fetchRegistryIndex, initLocalRegistry } from "./registry.js";
@@ -7,6 +8,7 @@ import { renderManagedBlock } from "./render.js";
 import { resolveSubscriptions } from "./resolver.js";
 import { loadFleetConfig, readTextIfExists, saveFleetConfig, writeText } from "./store.js";
 import type { RegistryRef } from "./types.js";
+import { parseTarget, type Target } from "./target.js";
 
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
@@ -37,10 +39,10 @@ async function main(): Promise<void> {
       await subscribe(paths.fleetConfigPath, rest[0]);
       return;
     case "plan":
-      await plan(paths.fleetConfigPath, paths.codexConfigPath);
+      await handleTargetedCommand("plan", rest, paths);
       return;
     case "apply":
-      await apply(paths.fleetConfigPath, paths.codexConfigPath);
+      await handleTargetedCommand("apply", rest, paths);
       return;
     case "doctor":
       await doctor(paths.fleetConfigPath, paths.codexConfigPath);
@@ -48,6 +50,19 @@ async function main(): Promise<void> {
     default:
       throw new Error(`Unknown command: ${command}`);
   }
+}
+
+async function handleTargetedCommand(command: "plan" | "apply", args: string[], paths: ReturnType<typeof defaultPaths>): Promise<void> {
+  const { target, remainingArgs } = parseTarget(args);
+  if (remainingArgs.length > 0) {
+    throw new Error(`Usage: ${command} [--target <codex|claude>]`);
+  }
+  const configPath = target === "codex" ? paths.codexConfigPath : paths.claudeConfigPath;
+  if (command === "plan") {
+    await plan(paths.fleetConfigPath, configPath, target);
+    return;
+  }
+  await apply(paths.fleetConfigPath, configPath, target);
 }
 
 async function handleRegistryCommand(args: string[], paths: ReturnType<typeof defaultPaths>): Promise<void> {
@@ -140,8 +155,8 @@ async function subscribe(configPath: string, subscription: string | undefined): 
   console.log(`Subscribed to ${subscription}`);
 }
 
-async function plan(configPath: string, codexConfigPath: string): Promise<void> {
-  const { renderedBlock, analysis, resolved } = await computePlan(configPath, codexConfigPath);
+async function plan(configPath: string, targetConfigPath: string, target: Target): Promise<void> {
+  const { renderedBlock, analysis, resolved } = await computePlan(configPath, targetConfigPath, target);
   printConfigAnalysis(analysis);
   if (analysis.externalMcpServerBlocks.length > 0) {
     console.warn(formatNotice("warn", `unmanaged mcp_servers blocks found outside markers: ${analysis.externalMcpServerBlocks.join(", ")}`));
@@ -160,18 +175,18 @@ async function plan(configPath: string, codexConfigPath: string): Promise<void> 
   process.stdout.write(renderedBlock);
 }
 
-async function apply(configPath: string, codexConfigPath: string): Promise<void> {
-  const { analysis } = await computePlan(configPath, codexConfigPath);
-  await writeText(codexConfigPath, analysis.updatedText);
+async function apply(configPath: string, targetConfigPath: string, target: Target): Promise<void> {
+  const { analysis } = await computePlan(configPath, targetConfigPath, target);
+  await writeText(targetConfigPath, analysis.updatedText);
   printConfigAnalysis(analysis);
   if (analysis.externalMcpServerBlocks.length > 0) {
     console.warn(formatNotice("warn", `unmanaged mcp_servers blocks found outside markers: ${analysis.externalMcpServerBlocks.join(", ")}`));
   }
-  console.log(`Updated ${codexConfigPath}`);
+  console.log(`Updated ${targetConfigPath}`);
 }
 
 async function doctor(configPath: string, codexConfigPath: string): Promise<void> {
-  const { analysis, resolved } = await computePlan(configPath, codexConfigPath);
+  const { analysis, resolved } = await computePlan(configPath, codexConfigPath, "codex");
   printConfigAnalysis(analysis);
   if (analysis.externalMcpServerBlocks.length > 0) {
     console.warn(formatNotice("warn", `unmanaged mcp_servers blocks found outside markers: ${analysis.externalMcpServerBlocks.join(", ")}`));
@@ -182,7 +197,7 @@ async function doctor(configPath: string, codexConfigPath: string): Promise<void
   }
 }
 
-async function computePlan(configPath: string, codexConfigPath: string) {
+async function computePlan(configPath: string, targetConfigPath: string, target: Target) {
   const config = await loadFleetConfig(configPath);
   const registries = await Promise.all(
     config.registries.map(async (ref) => ({
@@ -191,10 +206,26 @@ async function computePlan(configPath: string, codexConfigPath: string) {
     })),
   );
   const resolved = resolveSubscriptions(registries, config.subscriptions);
-  const renderedBlock = renderManagedBlock(resolved.servers);
-  const currentCodexConfig = (await readTextIfExists(codexConfigPath)) ?? "";
-  const analysis = replaceManagedBlock(currentCodexConfig, renderedBlock);
-  return { resolved, renderedBlock, analysis };
+  const currentConfig = (await readTextIfExists(targetConfigPath)) ?? "";
+  const targetResult = target === "codex"
+    ? (() => {
+        const renderedBlock = renderManagedBlock(resolved.servers);
+        const analysis = replaceManagedBlock(currentConfig, renderedBlock);
+        return { renderedBlock, analysis };
+      })()
+    : (() => {
+        const renderedBlock = renderClaudeManagedServers(resolved.servers);
+        const analysis = replaceClaudeManagedServers(currentConfig, resolved.servers);
+        return {
+          renderedBlock,
+          analysis: {
+            updatedText: analysis.updatedText,
+            adoptedMcpServerBlocks: analysis.adoptedMcpServers,
+            externalMcpServerBlocks: analysis.externalMcpServers,
+          },
+        };
+      })();
+  return { resolved, ...targetResult };
 }
 
 function upsertRegistry(registries: RegistryRef[], next: RegistryRef): RegistryRef[] {
@@ -235,9 +266,11 @@ function printHelp(): void {
   init
   registry add <name> <url>
   subscribe <registry>/<profile>
-  plan
-  apply
-  doctor`);
+  plan --target <codex|claude>
+  apply --target <codex|claude>
+  doctor
+
+For plan and apply, MCPFLEET_TARGET may be used instead of --target.`);
 }
 
 function parsePackageAddArgs(args: string[]): {

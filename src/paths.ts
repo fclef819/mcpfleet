@@ -5,6 +5,7 @@ export interface AppPaths {
   fleetConfigPath: string;
   localRegistryDir: string;
   codexConfigPath: string;
+  claudeConfigPath: string;
 }
 
 export function defaultPaths(cwd: string = process.cwd()): AppPaths {
@@ -13,5 +14,6 @@ export function defaultPaths(cwd: string = process.cwd()): AppPaths {
     fleetConfigPath: path.join(home, ".config", "mcpfleet", "config.yaml"),
     localRegistryDir: path.join(cwd, "mcp-registry"),
     codexConfigPath: path.join(home, ".codex", "config.toml"),
+    claudeConfigPath: path.join(home, ".claude.json"),
   };
 }

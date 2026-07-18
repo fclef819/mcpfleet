@@ -3,9 +3,9 @@
 [![npm downloads](https://img.shields.io/npm/dw/@fclef819/mcpfleet.svg)](https://www.npmjs.com/package/@fclef819/mcpfleet)
 [![license](https://img.shields.io/npm/l/@fclef819/mcpfleet.svg)](https://github.com/fclef819/mcpfleet/blob/main/LICENSE)
 
-`mcpfleet` is a TypeScript CLI for managing the Codex CLI MCP server configuration across multiple environments.
+`mcpfleet` is a TypeScript CLI for managing Codex and Claude MCP server configuration across multiple environments.
 
-It subscribes to static MCP package/profile registries and updates only the managed block in `~/.codex/config.toml`.
+It subscribes to static MCP package/profile registries and updates the selected target configuration.
 
 ## Goals
 
@@ -49,6 +49,7 @@ npx @fclef819/mcpfleet --help
 - User config: `~/.config/mcpfleet/config.yaml`
 - Local registry: `./mcp-registry`
 - Codex config: `~/.codex/config.toml`
+- Claude config: `~/.claude.json`
 
 ## Commands
 
@@ -61,10 +62,21 @@ mcpfleet registry build
 mcpfleet init
 mcpfleet registry add <name> <url>
 mcpfleet subscribe <registry>/<profile>
-mcpfleet plan
-mcpfleet apply
+mcpfleet plan --target codex
+mcpfleet apply --target codex
+mcpfleet plan --target claude
+mcpfleet apply --target claude
 mcpfleet doctor
 ```
+
+`plan` and `apply` require a target. Pass `--target` (or `-t`) with `codex` or
+`claude`; when it is omitted, `MCPFLEET_TARGET` is used. The command fails if
+neither is set. For example: `MCPFLEET_TARGET=claude mcpfleet plan`.
+
+For Claude, mcpfleet manages `mcpServers` in `~/.claude.json` and records the
+server names it owns in `mcpfleet.managedMcpServers`. Other Claude settings and
+unmanaged MCP servers are preserved. A conflicting unmanaged server name is an
+error rather than an overwrite.
 
 ## Registry Format
 
@@ -144,8 +156,8 @@ mcpfleet subscribe local/default
 Preview and apply:
 
 ```bash
-mcpfleet plan
-mcpfleet apply
+mcpfleet plan --target codex
+mcpfleet apply --target codex
 ```
 
 Check local runtime availability:
