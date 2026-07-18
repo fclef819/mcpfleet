@@ -6,6 +6,7 @@ export interface AppPaths {
   localRegistryDir: string;
   codexConfigPath: string;
   claudeConfigPath: string;
+  targetStateDir: string;
 }
 
 export function defaultPaths(cwd: string = process.cwd()): AppPaths {
@@ -15,5 +16,10 @@ export function defaultPaths(cwd: string = process.cwd()): AppPaths {
     localRegistryDir: path.join(cwd, "mcp-registry"),
     codexConfigPath: path.join(home, ".codex", "config.toml"),
     claudeConfigPath: path.join(home, ".claude.json"),
+    targetStateDir: path.join(home, ".config", "mcpfleet"),
   };
+}
+
+export function targetStatePath(paths: AppPaths, target: "codex" | "claude"): string {
+  return path.join(paths.targetStateDir, `${target}.json`);
 }

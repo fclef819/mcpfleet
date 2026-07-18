@@ -11,14 +11,14 @@ const servers: ResolvedServer[] = [{
 }];
 
 describe("replaceClaudeManagedServers", () => {
-  it("preserves unmanaged settings and records managed server names", () => {
+  it("preserves unmanaged settings without adding mcpfleet metadata", () => {
     const result = replaceClaudeManagedServers('{"theme":"dark","mcpServers":{"external":{"command":"uvx"}}}', servers);
     const config = JSON.parse(result.updatedText);
 
     expect(config.theme).toBe("dark");
     expect(config.mcpServers.external.command).toBe("uvx");
-    expect(config.mcpServers.demo).toEqual({ command: "npx", args: ["-y", "@demo/server"], env: { TOKEN: "secret" } });
-    expect(config.mcpfleet.managedMcpServers).toEqual(["demo"]);
+    expect(config.mcpServers.demo).toEqual({ type: "stdio", command: "npx", args: ["-y", "@demo/server"], env: { TOKEN: "secret" } });
+    expect(config.mcpfleet).toBeUndefined();
   });
 
   it("removes server names managed by an earlier apply", () => {
@@ -26,7 +26,7 @@ describe("replaceClaudeManagedServers", () => {
       mcpServers: { old: { command: "old" }, external: { command: "uvx" } },
       mcpfleet: { managedMcpServers: ["old"] },
     });
-    const result = replaceClaudeManagedServers(existing, servers);
+    const result = replaceClaudeManagedServers(existing, servers, ["old"]);
     const config = JSON.parse(result.updatedText);
 
     expect(config.mcpServers.old).toBeUndefined();
@@ -36,5 +36,17 @@ describe("replaceClaudeManagedServers", () => {
   it("does not overwrite a conflicting unmanaged server", () => {
     expect(() => replaceClaudeManagedServers('{"mcpServers":{"demo":{"command":"uvx"}}}', servers))
       .toThrow("unmanaged Claude mcpServers would be overwritten: demo");
+  });
+
+  it("migrates legacy in-config management metadata", () => {
+    const existing = JSON.stringify({
+      mcpServers: { old: { command: "old" } },
+      mcpfleet: { managedMcpServers: ["old"] },
+    });
+    const result = replaceClaudeManagedServers(existing, servers);
+    const config = JSON.parse(result.updatedText);
+
+    expect(config.mcpServers.old).toBeUndefined();
+    expect(config.mcpfleet).toBeUndefined();
   });
 });

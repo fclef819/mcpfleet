@@ -1,14 +1,14 @@
 #!/usr/bin/env node
-import { replaceManagedBlock } from "./codexConfig.js";
+import { reconcileCodexManagedServers, renderCodexManagedServers } from "./codexConfig.js";
 import { renderClaudeManagedServers, replaceClaudeManagedServers } from "./claudeConfig.js";
 import { doctorServers } from "./doctor.js";
-import { defaultPaths } from "./paths.js";
+import { defaultPaths, targetStatePath } from "./paths.js";
 import { addLocalPackageDefinition, addPackagesToProfile, buildLocalRegistry, createLocalProfile, fetchRegistryIndex, initLocalRegistry } from "./registry.js";
-import { renderManagedBlock } from "./render.js";
 import { resolveSubscriptions } from "./resolver.js";
 import { loadFleetConfig, readTextIfExists, saveFleetConfig, writeText } from "./store.js";
 import type { RegistryRef } from "./types.js";
 import { parseTarget, type Target } from "./target.js";
+import { loadTargetState, saveTargetState } from "./targetState.js";
 
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
@@ -45,7 +45,7 @@ async function main(): Promise<void> {
       await handleTargetedCommand("apply", rest, paths);
       return;
     case "doctor":
-      await doctor(paths.fleetConfigPath, paths.codexConfigPath);
+      await doctor(paths.fleetConfigPath);
       return;
     default:
       throw new Error(`Unknown command: ${command}`);
@@ -58,11 +58,12 @@ async function handleTargetedCommand(command: "plan" | "apply", args: string[], 
     throw new Error(`Usage: ${command} [--target <codex|claude>]`);
   }
   const configPath = target === "codex" ? paths.codexConfigPath : paths.claudeConfigPath;
+  const statePath = targetStatePath(paths, target);
   if (command === "plan") {
-    await plan(paths.fleetConfigPath, configPath, target);
+    await plan(paths.fleetConfigPath, configPath, statePath, target);
     return;
   }
-  await apply(paths.fleetConfigPath, configPath, target);
+  await apply(paths.fleetConfigPath, configPath, statePath, target);
 }
 
 async function handleRegistryCommand(args: string[], paths: ReturnType<typeof defaultPaths>): Promise<void> {
@@ -155,8 +156,8 @@ async function subscribe(configPath: string, subscription: string | undefined): 
   console.log(`Subscribed to ${subscription}`);
 }
 
-async function plan(configPath: string, targetConfigPath: string, target: Target): Promise<void> {
-  const { renderedBlock, analysis, resolved } = await computePlan(configPath, targetConfigPath, target);
+async function plan(configPath: string, targetConfigPath: string, statePath: string, target: Target): Promise<void> {
+  const { renderedBlock, analysis, resolved } = await computePlan(configPath, targetConfigPath, statePath, target);
   printConfigAnalysis(analysis);
   if (analysis.externalMcpServerBlocks.length > 0) {
     console.warn(formatNotice("warn", `unmanaged mcp_servers blocks found outside markers: ${analysis.externalMcpServerBlocks.join(", ")}`));
@@ -175,9 +176,10 @@ async function plan(configPath: string, targetConfigPath: string, target: Target
   process.stdout.write(renderedBlock);
 }
 
-async function apply(configPath: string, targetConfigPath: string, target: Target): Promise<void> {
-  const { analysis } = await computePlan(configPath, targetConfigPath, target);
+async function apply(configPath: string, targetConfigPath: string, statePath: string, target: Target): Promise<void> {
+  const { analysis, resolved } = await computePlan(configPath, targetConfigPath, statePath, target);
   await writeText(targetConfigPath, analysis.updatedText);
+  await saveTargetState(statePath, resolved.servers.map((server) => server.name));
   printConfigAnalysis(analysis);
   if (analysis.externalMcpServerBlocks.length > 0) {
     console.warn(formatNotice("warn", `unmanaged mcp_servers blocks found outside markers: ${analysis.externalMcpServerBlocks.join(", ")}`));
@@ -185,37 +187,27 @@ async function apply(configPath: string, targetConfigPath: string, target: Targe
   console.log(`Updated ${targetConfigPath}`);
 }
 
-async function doctor(configPath: string, codexConfigPath: string): Promise<void> {
-  const { analysis, resolved } = await computePlan(configPath, codexConfigPath, "codex");
-  printConfigAnalysis(analysis);
-  if (analysis.externalMcpServerBlocks.length > 0) {
-    console.warn(formatNotice("warn", `unmanaged mcp_servers blocks found outside markers: ${analysis.externalMcpServerBlocks.join(", ")}`));
-  }
+async function doctor(configPath: string): Promise<void> {
+  const resolved = await resolvePlan(configPath);
   const items = await doctorServers(resolved.servers);
   for (const item of items) {
     console.log(`${item.ok ? "OK" : "FAIL"} ${item.server}: ${item.detail}`);
   }
 }
 
-async function computePlan(configPath: string, targetConfigPath: string, target: Target) {
-  const config = await loadFleetConfig(configPath);
-  const registries = await Promise.all(
-    config.registries.map(async (ref) => ({
-      ref,
-      index: await fetchRegistryIndex(ref.url),
-    })),
-  );
-  const resolved = resolveSubscriptions(registries, config.subscriptions);
+async function computePlan(configPath: string, targetConfigPath: string, statePath: string, target: Target) {
+  const resolved = await resolvePlan(configPath);
   const currentConfig = (await readTextIfExists(targetConfigPath)) ?? "";
+  const state = await loadTargetState(statePath);
   const targetResult = target === "codex"
     ? (() => {
-        const renderedBlock = renderManagedBlock(resolved.servers);
-        const analysis = replaceManagedBlock(currentConfig, renderedBlock);
+        const renderedBlock = renderCodexManagedServers(resolved.servers);
+        const analysis = reconcileCodexManagedServers(currentConfig, resolved.servers, state.managedMcpServers);
         return { renderedBlock, analysis };
       })()
     : (() => {
         const renderedBlock = renderClaudeManagedServers(resolved.servers);
-        const analysis = replaceClaudeManagedServers(currentConfig, resolved.servers);
+        const analysis = replaceClaudeManagedServers(currentConfig, resolved.servers, state.managedMcpServers);
         return {
           renderedBlock,
           analysis: {
@@ -226,6 +218,17 @@ async function computePlan(configPath: string, targetConfigPath: string, target:
         };
       })();
   return { resolved, ...targetResult };
+}
+
+async function resolvePlan(configPath: string) {
+  const config = await loadFleetConfig(configPath);
+  const registries = await Promise.all(
+    config.registries.map(async (ref) => ({
+      ref,
+      index: await fetchRegistryIndex(ref.url),
+    })),
+  );
+  return resolveSubscriptions(registries, config.subscriptions);
 }
 
 function upsertRegistry(registries: RegistryRef[], next: RegistryRef): RegistryRef[] {

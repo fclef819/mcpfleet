@@ -1,7 +1,7 @@
 {
   "name": "@fclef819/mcpfleet",
-  "version": "0.0.12",
-  "description": "CLI for managing Codex MCP server config blocks across environments",
+  "version": "1.0.0",
+  "description": "CLI for managing Codex and Claude MCP server configuration across environments",
   "license": "MIT",
   "repository": {
     "type": "git",

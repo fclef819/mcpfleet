@@ -10,27 +10,39 @@ It subscribes to static MCP package/profile registries and updates the selected 
 ## Goals
 
 - Keep MCP server definitions consistent across machines
-- Preserve all Codex settings outside the managed block
+- Preserve settings that mcpfleet does not own
 - Support a simple static registry model built from YAML files
 
-## Managed Codex Config Block
+## Managed MCP Servers
 
-`@fclef819/mcpfleet` only replaces the section between these markers in `~/.codex/config.toml`:
+MCP servers from subscribed profiles are managed by mcpfleet. Their names are
+recorded separately for each target:
 
-```toml
-# BEGIN MCPFLEET
-...
-# END MCPFLEET
+```text
+~/.config/mcpfleet/codex.json
+~/.config/mcpfleet/claude.json
 ```
 
-Important behavior:
+This is analogous to declaring a package with `uv add`: future `apply` runs
+can add, update, or remove these MCP servers. MCP servers added manually to a
+target configuration but absent from this state are unmanaged, analogous to a
+`uv pip install`; mcpfleet leaves them unchanged.
 
-- Settings outside the marker block are preserved
-- Non-`[mcp_servers.*]` settings found inside the marker block are preserved and moved outside it during `apply`
-- If the marker block does not exist, it is appended to the end of the file
-- If unmanaged `[mcp_servers.*]` blocks exist outside the markers, `plan`, `apply`, and `doctor` warn
-- Duplicate MCP server names with different definitions cause an error
-- Duplicate MCP server names with identical definitions are deduplicated
+When a manual MCP server has the same name and equivalent connection settings
+as a subscribed server, `apply` adopts it into mcpfleet management. It does not
+rewrite the existing entry during adoption. A same-named server with different
+connection settings is an error rather than an overwrite.
+
+For managed Codex MCP servers, mcpfleet updates only the connection fields it
+owns (`command`, `url`, `args`, and `startup_timeout_sec`). It preserves other
+server fields, including Codex-generated approval settings. For Claude, it
+updates the server connection fields while preserving other fields on a managed
+server.
+
+Older Codex `# BEGIN MCPFLEET` / `# END MCPFLEET` blocks are migrated on the
+next `apply`: their server names move into the external state file and the
+markers are removed. Older Claude `mcpfleet.managedMcpServers` metadata is
+migrated similarly.
 
 ## Install
 
@@ -50,6 +62,8 @@ npx @fclef819/mcpfleet --help
 - Local registry: `./mcp-registry`
 - Codex config: `~/.codex/config.toml`
 - Claude config: `~/.claude.json`
+- Managed Codex MCP state: `~/.config/mcpfleet/codex.json`
+- Managed Claude MCP state: `~/.config/mcpfleet/claude.json`
 
 ## Commands
 
@@ -73,10 +87,9 @@ mcpfleet doctor
 `claude`; when it is omitted, `MCPFLEET_TARGET` is used. The command fails if
 neither is set. For example: `MCPFLEET_TARGET=claude mcpfleet plan`.
 
-For Claude, mcpfleet manages `mcpServers` in `~/.claude.json` and records the
-server names it owns in `mcpfleet.managedMcpServers`. Other Claude settings and
-unmanaged MCP servers are preserved. A conflicting unmanaged server name is an
-error rather than an overwrite.
+The state file contains no server credentials or definitions; it only records
+the MCP server names mcpfleet owns. Target configuration files contain only
+Codex or Claude settings.
 
 ## Registry Format
 
@@ -156,8 +169,12 @@ mcpfleet subscribe local/default
 Preview and apply:
 
 ```bash
-mcpfleet plan --target codex
-mcpfleet apply --target codex
+mcpfleet plan -t codex
+mcpfleet apply -t codex
+
+# Or select the target through the environment.
+MCPFLEET_TARGET=claude mcpfleet plan
+MCPFLEET_TARGET=claude mcpfleet apply
 ```
 
 Check local runtime availability:

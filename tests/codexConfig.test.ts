@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { replaceManagedBlock } from "../src/codexConfig.js";
+import TOML from "@iarna/toml";
+import { reconcileCodexManagedServers, replaceManagedBlock } from "../src/codexConfig.js";
+import type { ResolvedServer } from "../src/types.js";
 
 const block = `# BEGIN MCPFLEET
 [mcp_servers.demo]
@@ -119,5 +121,60 @@ command = "uvx"
     expect(result.adoptedMcpServerBlocks).toEqual([]);
     expect(result.updatedText.match(/\[mcp_servers\.demo\]/g)).toHaveLength(2);
     expect(result.externalMcpServerBlocks).toEqual(["demo"]);
+  });
+});
+
+describe("reconcileCodexManagedServers", () => {
+  const server: ResolvedServer = {
+    name: "demo",
+    command: "uvx",
+    args: ["demo-server"],
+    env: {},
+    sources: ["local/default"],
+  };
+
+  it("updates only mcpfleet-owned fields and preserves approvals", () => {
+    const existing = `[mcp_servers.demo]
+command = "npx"
+default_tools_approval_mode = "prompt"
+
+[mcp_servers.demo.tools.read]
+approval_mode = "auto"
+`;
+    const result = reconcileCodexManagedServers(existing, [server], ["demo"]);
+
+    expect(result.updatedText).toContain('command = "uvx"');
+    expect(result.updatedText).toContain('default_tools_approval_mode = "prompt"');
+    expect(result.updatedText).toContain('[mcp_servers.demo.tools.read]');
+    expect(result.updatedText).toContain('approval_mode = "auto"');
+    expect(TOML.parse(result.updatedText)).toMatchObject({
+      mcp_servers: { demo: { command: "uvx", default_tools_approval_mode: "prompt" } },
+    });
+  });
+
+  it("adopts an equivalent manual server without changing it", () => {
+    const existing = `[mcp_servers.demo]
+command = "uvx"
+args = ["demo-server"]
+default_tools_approval_mode = "prompt"
+`;
+    const result = reconcileCodexManagedServers(existing, [server]);
+
+    expect(result.adoptedMcpServerBlocks).toEqual(["demo"]);
+    expect(result.updatedText).toContain('default_tools_approval_mode = "prompt"');
+  });
+
+  it("removes legacy markers after migrating their managed servers", () => {
+    const existing = `# BEGIN MCPFLEET
+[mcp_servers.demo]
+command = "uvx"
+args = ["demo-server"]
+# END MCPFLEET
+`;
+    const result = reconcileCodexManagedServers(existing, [server]);
+
+    expect(result.updatedText).not.toContain("BEGIN MCPFLEET");
+    expect(result.updatedText).not.toContain("END MCPFLEET");
+    expect(result.updatedText).toContain("[mcp_servers.demo]");
   });
 });
