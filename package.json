@@ -1,6 +1,6 @@
 {
   "name": "@fclef819/mcpfleet",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "CLI for managing Codex and Claude MCP server configuration across environments",
   "license": "MIT",
   "repository": {
