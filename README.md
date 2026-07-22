@@ -75,6 +75,7 @@ mcpfleet profile add <profile> <package...>
 mcpfleet registry build
 mcpfleet init
 mcpfleet registry add <name> <url>
+mcpfleet profile-ls <registry>
 mcpfleet subscribe <registry>/<profile>
 mcpfleet plan --target codex
 mcpfleet apply --target codex

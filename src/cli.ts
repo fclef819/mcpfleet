@@ -31,6 +31,9 @@ async function main(): Promise<void> {
     case "profile":
       await handleProfileCommand(rest, paths.localRegistryDir);
       return;
+    case "profile-ls":
+      await listRegistryProfiles(paths.fleetConfigPath, rest);
+      return;
     case "init":
       await initFleetConfig(paths.fleetConfigPath);
       console.log(`Initialized ${paths.fleetConfigPath}`);
@@ -138,6 +141,24 @@ async function handleProfileCommand(args: string[], localRegistryDir: string): P
     }
     default:
       throw new Error(`Unknown profile command: ${subcommand ?? "(missing)"}`);
+  }
+}
+
+async function listRegistryProfiles(configPath: string, args: string[]): Promise<void> {
+  const [registryName, ...remainingArgs] = args;
+  if (!registryName || remainingArgs.length > 0) {
+    throw new Error("Usage: profile-ls <registry>");
+  }
+
+  const config = await loadFleetConfig(configPath);
+  const registry = config.registries.find((item) => item.name === registryName);
+  if (!registry) {
+    throw new Error(`Unknown registry: ${registryName}`);
+  }
+
+  const index = await fetchRegistryIndex(registry.url);
+  for (const profile of [...index.profiles].sort((a, b) => a.name.localeCompare(b.name))) {
+    console.log(profile.name);
   }
 }
 
@@ -268,6 +289,7 @@ function printHelp(): void {
   registry build
   init
   registry add <name> <url>
+  profile-ls <registry>
   subscribe <registry>/<profile>
   plan --target <codex|claude>
   apply --target <codex|claude>
